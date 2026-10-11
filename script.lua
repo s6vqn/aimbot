@@ -5,12 +5,10 @@ local LocalPlayer = Players.LocalPlayer
 
 local Settings = {
     Enabled = false,
-    Smoothness = 0.6,
-    MovingMultiplier = 0.25,
-    FOV = 10,
-    MinDistance = 5,
+    Smoothness = 0.35,
+    FOV = 150,
     AimPart = "Head",
-    TeamCheck = true,
+    TeamCheck = false,
 }
 
 print("[Aimbot] Loaded. T = toggle, hold right click = aim")
@@ -43,8 +41,6 @@ end
 local function getTarget(cam)
     local center = cam.ViewportSize / 2
     local best, bestDist = nil, Settings.FOV
-    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    local myPos = myRoot and myRoot.Position or cam.CFrame.Position
 
     for _, p in ipairs(Players:GetPlayers()) do
         local char = p.Character
@@ -52,10 +48,28 @@ local function getTarget(cam)
             local hum = char:FindFirstChildOfClass("Humanoid")
             local part = char:FindFirstChild(Settings.AimPart) or char:FindFirstChild("HumanoidRootPart")
             if hum and hum.Health > 0 and part
-                and not (Settings.TeamCheck and p.Team ~= nil and p.Team == LocalPlayer.Team)
-                and (part.Position - myPos).Magnitude > Settings.MinDistance then
+                and not (Settings.TeamCheck and p.Team ~= nil and p.Team == LocalPlayer.Team) then
                 local pos, on = cam:WorldToViewportPoint(part.Position)
                 if on then
                     local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
                     if d < bestDist and visible(cam, part, char) then
                         best, bestDist = part, d
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, function()
+    if not Settings.Enabled then return end
+    if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
+
+    local cam = workspace.CurrentCamera
+    local target = getTarget(cam)
+    if target then
+        local goal = CFrame.lookAt(cam.CFrame.Position, target.Position)
+        cam.CFrame = cam.CFrame:Lerp(goal, Settings.Smoothness)
+    end
+end)
