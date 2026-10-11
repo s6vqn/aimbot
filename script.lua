@@ -7,7 +7,7 @@ local Settings = {
     Enabled = false,
     Smoothness = 0.35,
     FOV = 150,
-    MinDistance = 10.5,
+    MinDistance = 8,
     AimPart = "Head",
     TeamCheck = false,
 }
@@ -66,10 +66,4 @@ local function getTarget(cam)
     return best
 end
 
-RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, function()
-    if not Settings.Enabled then return end
-    if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
-
-    local cam = workspace.CurrentCamera
-    local target = getTarget(cam)
-    if
+RunSe
