@@ -5,8 +5,9 @@ local LocalPlayer = Players.LocalPlayer
 
 local Settings = {
     Enabled = false,
-    Smoothness = 0.8,
-    FOV = 50,
+    Smoothness = 0.6,
+    MovingMultiplier = 0.25,
+    FOV = 10,
     MinDistance = 5,
     AimPart = "Head",
     TeamCheck = true,
@@ -58,22 +59,3 @@ local function getTarget(cam)
                     local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
                     if d < bestDist and visible(cam, part, char) then
                         best, bestDist = part, d
-                    end
-                end
-            end
-        end
-    end
-    return best
-end
-
-RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, function()
-    if not Settings.Enabled then return end
-    if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
-
-    local cam = workspace.CurrentCamera
-    local target = getTarget(cam)
-    if target then
-        local goal = CFrame.lookAt(cam.CFrame.Position, target.Position)
-        cam.CFrame = cam.CFrame:Lerp(goal, Settings.Smoothness)
-    end
-end)
