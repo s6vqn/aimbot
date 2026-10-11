@@ -5,14 +5,16 @@ local LocalPlayer = Players.LocalPlayer
 
 local Settings = {
     Enabled = false,
-    Smoothness = 0.08,
-    FOV = 20,
+    PullSpeed = 5,
+    MovingMultiplier = 0.4,
+    FOV = 120,
     MinDistance = 5,
     ToggleBlockDistance = 1,
     TeamCheck = true,
-    RerollTime = 2,
-    LimbChance = 0.10,
-    HeadChance = 0.45,
+    RerollTime = 1.5,
+    TorsoChance = 0.50,
+    HeadChance = 0.40,
+    -- ang natitira (10%) ay braso o binti
 }
 
 local TorsoNames = {"UpperTorso", "Torso", "LowerTorso"}
@@ -76,20 +78,22 @@ local function pickPart(char)
 
     local r = math.random()
     local part
-    if r < Settings.LimbChance then
+    if r < Settings.TorsoChance then
+        part = firstPart(char, TorsoNames)
+    elseif r < Settings.TorsoChance + Settings.HeadChance then
+        part = char:FindFirstChild("Head")
+    else
         local available = {}
         for _, n in ipairs(LimbNames) do
             local l = char:FindFirstChild(n)
             if l then table.insert(available, l) end
         end
-        part = available[math.random(1, math.max(#available, 1))]
-    elseif r < Settings.LimbChance + Settings.HeadChance then
-        part = char:FindFirstChild("Head")
-    else
-        part = firstPart(char, TorsoNames)
+        if #available > 0 then
+            part = available[math.random(1, #available)]
+        end
     end
 
-    part = part or char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+    part = part or firstPart(char, TorsoNames) or char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
     if part then
         chosen[char] = {part = part, time = tick()}
     end
@@ -142,14 +146,20 @@ local function getTarget(cam)
     return best
 end
 
-RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, function()
+RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, function(dt)
     if not Settings.Enabled then return end
     if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
 
     local cam = workspace.CurrentCamera
     local target = getTarget(cam)
-    if target then
-        local goal = CFrame.lookAt(cam.CFrame.Position, target.Position)
-        cam.CFrame = cam.CFrame:Lerp(goal, Settings.Smoothness)
+    if not target then return end
+
+    local speed = Settings.PullSpeed
+    if UIS:GetMouseDelta().Magnitude > 1 then
+        speed = speed * Settings.MovingMultiplier
     end
+
+    local alpha = 1 - math.exp(-speed * dt)
+    local goal = CFrame.lookAt(cam.CFrame.Position, target.Position)
+    cam.CFrame = cam.CFrame:Lerp(goal, alpha)
 end)
