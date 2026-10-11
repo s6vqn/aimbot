@@ -7,6 +7,7 @@ local Settings = {
     Enabled = false,
     Smoothness = 0.35,
     FOV = 150,
+    MinDistance = 10,
     AimPart = "Head",
     TeamCheck = false,
 }
@@ -41,6 +42,8 @@ end
 local function getTarget(cam)
     local center = cam.ViewportSize / 2
     local best, bestDist = nil, Settings.FOV
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local myPos = myRoot and myRoot.Position or cam.CFrame.Position
 
     for _, p in ipairs(Players:GetPlayers()) do
         local char = p.Character
@@ -48,7 +51,8 @@ local function getTarget(cam)
             local hum = char:FindFirstChildOfClass("Humanoid")
             local part = char:FindFirstChild(Settings.AimPart) or char:FindFirstChild("HumanoidRootPart")
             if hum and hum.Health > 0 and part
-                and not (Settings.TeamCheck and p.Team ~= nil and p.Team == LocalPlayer.Team) then
+                and not (Settings.TeamCheck and p.Team ~= nil and p.Team == LocalPlayer.Team)
+                and (part.Position - myPos).Magnitude > Settings.MinDistance then
                 local pos, on = cam:WorldToViewportPoint(part.Position)
                 if on then
                     local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
