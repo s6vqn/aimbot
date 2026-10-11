@@ -33,11 +33,30 @@ local function visible(cam, part, char)
     local ignore = {LocalPlayer.Character}
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
-    for _ = 1, 8 do
+    for _ = 1, 15 do
         params.FilterDescendantsInstances = ignore
         local hit = workspace:Raycast(cam.CFrame.Position, part.Position - cam.CFrame.Position, params)
         if not hit then return true end
-        if hit.Instance:IsDescendantOf(char) then return true end
-        if hit.Instance.Transparency >= 0.9 or not hit.Instance.CanCollide then
-            table.insert(ignore, hit.Instance)
+
+        local inst = hit.Instance
+        if inst:IsDescendantOf(char) then return true end
+
+        local model = inst:FindFirstAncestorOfClass("Model")
+        local hum = model and model:FindFirstChildOfClass("Humanoid")
+        local isDeadBody = hum and (hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead)
+
+        if isDeadBody then
+            table.insert(ignore, model)
+        elseif inst.Transparency >= 0.9 or not inst.CanCollide then
+            table.insert(ignore, inst)
         else
+            return false
+        end
+    end
+    return false
+end
+
+local function getTarget(cam)
+    local center = cam.ViewportSize / 2
+    local best, bestDist = nil, Settings.FOV
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humano
