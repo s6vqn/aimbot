@@ -7,7 +7,7 @@ local Settings = {
     Enabled = false,
     Smoothness = 0.35,
     FOV = 150,
-    MinDistance = 8,
+    MinDistance = 10,
     AimPart = "Head",
     TeamCheck = false,
 }
@@ -21,16 +21,26 @@ UIS.InputBegan:Connect(function(input)
     end
 end)
 
+local function isDead(hum)
+    return hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead
+end
+
 local function visible(cam, part, char)
     local ignore = {LocalPlayer.Character}
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
-    for _ = 1, 8 do
+    for _ = 1, 15 do
         params.FilterDescendantsInstances = ignore
         local hit = workspace:Raycast(cam.CFrame.Position, part.Position - cam.CFrame.Position, params)
         if not hit then return true end
         if hit.Instance:IsDescendantOf(char) then return true end
-        if hit.Instance.Transparency >= 0.9 or not hit.Instance.CanCollide then
+
+        local model = hit.Instance:FindFirstAncestorOfClass("Model")
+        local hum = model and model:FindFirstChildOfClass("Humanoid")
+
+        if hum and isDead(hum) then
+            table.insert(ignore, model)
+        elseif hit.Instance.Transparency >= 0.9 or not hit.Instance.CanCollide then
             table.insert(ignore, hit.Instance)
         else
             return false
@@ -50,20 +60,9 @@ local function getTarget(cam)
         if p ~= LocalPlayer and char then
             local hum = char:FindFirstChildOfClass("Humanoid")
             local part = char:FindFirstChild(Settings.AimPart) or char:FindFirstChild("HumanoidRootPart")
-            if hum and hum.Health > 0 and part
+            if hum and not isDead(hum) and part
                 and not (Settings.TeamCheck and p.Team ~= nil and p.Team == LocalPlayer.Team)
                 and (part.Position - myPos).Magnitude > Settings.MinDistance then
                 local pos, on = cam:WorldToViewportPoint(part.Position)
                 if on then
                     local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                    if d < bestDist and visible(cam, part, char) then
-                        best, bestDist = part, d
-                    end
-                end
-            end
-        end
-    end
-    return best
-end
-
-RunSe
