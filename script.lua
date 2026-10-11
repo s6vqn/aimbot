@@ -8,17 +8,30 @@ local Settings = {
     Smoothness = 0.35,
     FOV = 150,
     AimPart = "Head",
-    TeamCheck = false,
+    TeamCheck = true, -- naka-on na
 }
 
 print("[Aimbot] Loaded. T = toggle, hold right click = aim")
 
-UIS.InputBegan:Connect(function(input)
+UIS.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.T then
         Settings.Enabled = not Settings.Enabled
         print("[Aimbot] Enabled:", Settings.Enabled)
     end
 end)
+
+-- Match check: galing sa server attribute
+local function isInMatch(player)
+    return player:GetAttribute("InMatch") == true
+end
+
+local function isAlive(char)
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    return hum ~= nil
+        and hum.Health > 0
+        and hum:GetState() ~= Enum.HumanoidStateType.Dead
+end
 
 local function visible(cam, part, char)
     local ignore = {LocalPlayer.Character}
@@ -38,17 +51,24 @@ local function visible(cam, part, char)
     return false
 end
 
+local function isValidTarget(p)
+    if p == LocalPlayer then return false end
+    if not isInMatch(p) then return false end -- spectator, lobby, labas ng match
+    if Settings.TeamCheck and p.Team ~= nil and p.Team == LocalPlayer.Team then
+        return false
+    end
+    return isAlive(p.Character)
+end
+
 local function getTarget(cam)
     local center = cam.ViewportSize / 2
     local best, bestDist = nil, Settings.FOV
 
     for _, p in ipairs(Players:GetPlayers()) do
-        local char = p.Character
-        if p ~= LocalPlayer and char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
+        if isValidTarget(p) then
+            local char = p.Character
             local part = char:FindFirstChild(Settings.AimPart) or char:FindFirstChild("HumanoidRootPart")
-            if hum and hum.Health > 0 and part
-                and not (Settings.TeamCheck and p.Team ~= nil and p.Team == LocalPlayer.Team) then
+            if part then
                 local pos, on = cam:WorldToViewportPoint(part.Position)
                 if on then
                     local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
@@ -62,8 +82,10 @@ local function getTarget(cam)
     return best
 end
 
-RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, function()
+RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Camera.Value + 1, function()
     if not Settings.Enabled then return end
+    if not isInMatch(LocalPlayer) then return end -- hindi gagana kung ikaw mismo ay spectator/lobby
+    if not isAlive(LocalPlayer.Character) then return end
     if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
 
     local cam = workspace.CurrentCamera
