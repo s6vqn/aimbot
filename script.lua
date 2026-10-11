@@ -6,7 +6,7 @@ local LocalPlayer = Players.LocalPlayer
 local Settings = {
     Enabled = false,
     Smoothness = 0.35,
-    FOV = 30,
+    FOV = 150,
     AimPart = "Head",
     TeamCheck = false,
 }
