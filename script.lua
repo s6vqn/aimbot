@@ -5,17 +5,14 @@ local LocalPlayer = Players.LocalPlayer
 
 local Settings = {
     Enabled = false,
-    Smoothness = 0.2,
-    FOV = 5,
+    Pull = 0.15,
+    MovingPullMultiplier = 0.2,
+    FOV = 60,
     MinDistance = 5,
     AimPart = "Head",
-    MoveThreshold = 2,
-    ResumeDelay = 0.15,
 }
 
 print("[Aimbot] Loaded. T = toggle, hold right click = aim")
-
-local resumeAt = 0
 
 UIS.InputBegan:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.T then
@@ -59,8 +56,8 @@ end
 local function getTarget(cam)
     local center = cam.ViewportSize / 2
     local best, bestDist = nil, Settings.FOV
-    local myChar = LocalPlayer.Character
-    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local myPos = myRoot and myRoot.Position or cam.CFrame.Position
 
     for _, p in ipairs(Players:GetPlayers()) do
         local char = p.Character
@@ -68,4 +65,34 @@ local function getTarget(cam)
             local hum = char:FindFirstChildOfClass("Humanoid")
             local part = char:FindFirstChild(Settings.AimPart) or char:FindFirstChild("HumanoidRootPart")
             if hum and hum.Health > 0 and part then
-                local studs = (part.Position - (myRoot and myRoot.Position or cam.CFrame.Position)).Magnitude
+                if (part.Position - myPos).Magnitude >= Settings.MinDistance then
+                    local pos, on = cam:WorldToViewportPoint(part.Position)
+                    if on then
+                        local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                        if d < bestDist and visible(cam, part, char) then
+                            best, bestDist = part, d
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, function()
+    if not Settings.Enabled then return end
+    if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
+
+    local cam = workspace.CurrentCamera
+    local target = getTarget(cam)
+    if not target then return end
+
+    local strength = Settings.Pull
+    if UIS:GetMouseDelta().Magnitude > 1 then
+        strength = strength * Settings.MovingPullMultiplier
+    end
+
+    local goal = CFrame.lookAt(cam.CFrame.Position, target.Position)
+    cam.CFrame = cam.CFrame:Lerp(goal, strength)
+end)
