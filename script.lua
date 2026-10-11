@@ -17,39 +17,68 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.T then
         Settings.Aimbot = not Settings.Aimbot
+        print("Aimbot:", Settings.Aimbot)
     end
 end)
 
-local function IsVisible(part, character)
-    local origin = Camera.CFrame.Position
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
-    params.IgnoreWater = true
-
-    local result = workspace:Raycast(origin, part.Position - origin, params)
-    return result == nil or result.Instance:IsDescendantOf(character)
+local function GetAimPart(char)
+    return char:FindFirstChild(Settings.AimPart)
+        or char:FindFirstChild("HumanoidRootPart")
+        or char:FindFirstChild("UpperTorso")
+        or char:FindFirstChild("Torso")
 end
 
-RunService.RenderStepped:Connect(function()
+local function SameTeam(p)
+    return p.Team ~= nil and p.Team == LocalPlayer.Team
+end
+
+local function IsVisible(part, character)
+    local origin = Camera.CFrame.Position
+    local ignore = {LocalPlayer.Character}
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.IgnoreWater = true
+
+    for _ = 1, 10 do
+        params.FilterDescendantsInstances = ignore
+        local result = workspace:Raycast(origin, part.Position - origin, params)
+        if not result then return true end
+
+        local hit = result.Instance
+        if hit:IsDescendantOf(character) then return true end
+
+        local model = hit:FindFirstAncestorOfClass("Model")
+        local isPlayerPart = model and model:FindFirstChildOfClass("Humanoid")
+        if hit.Transparency >= 0.9 or isPlayerPart then
+            table.insert(ignore, hit)
+        else
+            return false
+        end
+    end
+    return false
+end
+
+RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Camera.Value + 1, function()
     if not Settings.Aimbot then return end
     if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
 
+    Camera = workspace.CurrentCamera
     local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     local target, closest = nil, Settings.FOVSize
 
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local part = p.Character:FindFirstChild(Settings.AimPart) or p.Character:FindFirstChild("HumanoidRootPart")
-            local hum = p.Character:FindFirstChild("Humanoid")
+    for _, p in ipairs(Players:GetPlayers()) do
+        local char = p.Character
+        if p ~= LocalPlayer and char then
+            local part = GetAimPart(char)
+            local hum = char:FindFirstChildOfClass("Humanoid")
             if part then
                 if Settings.KillCheck and (not hum or hum.Health <= 0) then continue end
-                if Settings.TeamCheck and p.Team == LocalPlayer.Team then continue end
+                if Settings.TeamCheck and SameTeam(p) then continue end
 
                 local pos, on = Camera:WorldToViewportPoint(part.Position)
                 if on then
                     local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                    if d < closest and IsVisible(part, p.Character) then
+                    if d < closest and IsVisible(part, char) then
                         closest = d
                         target = part
                     end
