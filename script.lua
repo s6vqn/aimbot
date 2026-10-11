@@ -6,21 +6,20 @@ local LocalPlayer = Players.LocalPlayer
 local Settings = {
     Enabled = false,
     PullSpeed = 5,
-    MovingMultiplier = 0.4,
-    FOV = 120,
+    MovingMultiplier = 0.15,
+    FOV = 40,
     MinDistance = 5,
     ToggleBlockDistance = 1,
     TeamCheck = true,
+    HeadBias = 0.6,
+    LimbChance = 0.20,
     RerollTime = 1.5,
-    TorsoChance = 0.50,
-    HeadChance = 0.40,
-    -- ang natitira (10%) ay braso o binti
 }
 
-local TorsoNames = {"UpperTorso", "Torso", "LowerTorso"}
+local TorsoNames = {"UpperTorso", "Torso", "HumanoidRootPart"}
 local LimbNames = {
-    "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg",
-    "Left Arm", "Right Arm", "Left Leg", "Right Leg",
+    "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg", -- R15
+    "Left Arm", "Right Arm", "Left Leg", "Right Leg",                 -- R6
 }
 
 print("[Aimbot] Loaded. T = toggle, hold right click = aim")
@@ -61,43 +60,37 @@ UIS.InputBegan:Connect(function(input)
     end
 end)
 
-local function firstPart(char, names)
-    for _, n in ipairs(names) do
+local function getTorso(char)
+    for _, n in ipairs(TorsoNames) do
         local part = char:FindFirstChild(n)
         if part then return part end
     end
 end
 
-local chosen = {}
+-- limb roll: bawat player may sariling roll na nire-reroll kada RerollTime
+local limbRoll = {}
 
-local function pickPart(char)
-    local entry = chosen[char]
-    if entry and tick() - entry.time < Settings.RerollTime and entry.part.Parent then
-        return entry.part
-    end
-
-    local r = math.random()
-    local part
-    if r < Settings.TorsoChance then
-        part = firstPart(char, TorsoNames)
-    elseif r < Settings.TorsoChance + Settings.HeadChance then
-        part = char:FindFirstChild("Head")
-    else
-        local available = {}
-        for _, n in ipairs(LimbNames) do
-            local l = char:FindFirstChild(n)
-            if l then table.insert(available, l) end
+local function getLimb(char)
+    local entry = limbRoll[char]
+    if not entry or tick() - entry.time >= Settings.RerollTime then
+        local limb = nil
+        if math.random() < Settings.LimbChance then
+            local available = {}
+            for _, n in ipairs(LimbNames) do
+                local l = char:FindFirstChild(n)
+                if l then table.insert(available, l) end
+            end
+            if #available > 0 then
+                limb = available[math.random(1, #available)]
+            end
         end
-        if #available > 0 then
-            part = available[math.random(1, #available)]
-        end
+        entry = {limb = limb, time = tick()}
+        limbRoll[char] = entry
     end
-
-    part = part or firstPart(char, TorsoNames) or char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-    if part then
-        chosen[char] = {part = part, time = tick()}
+    if entry.limb and entry.limb.Parent then
+        return entry.limb
     end
-    return part
+    return nil
 end
 
 local function visible(cam, part, char)
@@ -118,6 +111,12 @@ local function visible(cam, part, char)
     return false
 end
 
+local function screenDist(cam, part, center)
+    local pos, on = cam:WorldToViewportPoint(part.Position)
+    if not on then return nil end
+    return (Vector2.new(pos.X, pos.Y) - center).Magnitude
+end
+
 local function getTarget(cam)
     local center = cam.ViewportSize / 2
     local best, bestDist = nil, Settings.FOV
@@ -130,15 +129,32 @@ local function getTarget(cam)
             local root = char:FindFirstChild("HumanoidRootPart")
             if hum and hum.Health > 0 and root
                 and (root.Position - myPos).Magnitude > Settings.MinDistance then
-                local part = pickPart(char)
-                if part then
-                    local pos, on = cam:WorldToViewportPoint(part.Position)
-                    if on then
-                        local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                        if d < bestDist and visible(cam, part, char) then
-                            best, bestDist = part, d
+                local head = char:FindFirstChild("Head")
+                local torso = getTorso(char)
+                local limb = getLimb(char)
+
+                local part, d
+                if limb then
+                    part, d = limb, screenDist(cam, limb, center)
+                else
+                    local dh = head and screenDist(cam, head, center)
+                    local dt = torso and screenDist(cam, torso, center)
+
+                    if dh and dt then
+                        if dt < dh * Settings.HeadBias then
+                            part, d = torso, dt
+                        else
+                            part, d = head, dh
                         end
+                    elseif dh then
+                        part, d = head, dh
+                    elseif dt then
+                        part, d = torso, dt
                     end
+                end
+
+                if part and d and d < bestDist and visible(cam, part, char) then
+                    best, bestDist = part, d
                 end
             end
         end
