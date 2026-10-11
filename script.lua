@@ -5,11 +5,11 @@ local LocalPlayer = Players.LocalPlayer
 
 local Settings = {
     Enabled = false,
-    Pull = 0.15,
-    MovingPullMultiplier = 0.2,
-    FOV = 60,
+    Smoothness = 0.8,
+    FOV = 50,
     MinDistance = 5,
     AimPart = "Head",
+    TeamCheck = true,
 }
 
 print("[Aimbot] Loaded. T = toggle, hold right click = aim")
@@ -20,20 +20,6 @@ UIS.InputBegan:Connect(function(input)
         print("[Aimbot] Enabled:", Settings.Enabled)
     end
 end)
-
-local function isTeammate(p)
-    if LocalPlayer.Team ~= nil and p.Team == LocalPlayer.Team then
-        return true
-    end
-    if LocalPlayer.Team ~= nil and p.Team ~= nil and p.TeamColor == LocalPlayer.TeamColor then
-        return true
-    end
-    local myTeamAttr = LocalPlayer:GetAttribute("Team")
-    if myTeamAttr ~= nil and p:GetAttribute("Team") == myTeamAttr then
-        return true
-    end
-    return false
-end
 
 local function visible(cam, part, char)
     local ignore = {LocalPlayer.Character}
@@ -61,17 +47,17 @@ local function getTarget(cam)
 
     for _, p in ipairs(Players:GetPlayers()) do
         local char = p.Character
-        if p ~= LocalPlayer and char and not isTeammate(p) then
+        if p ~= LocalPlayer and char then
             local hum = char:FindFirstChildOfClass("Humanoid")
             local part = char:FindFirstChild(Settings.AimPart) or char:FindFirstChild("HumanoidRootPart")
-            if hum and hum.Health > 0 and part then
-                if (part.Position - myPos).Magnitude >= Settings.MinDistance then
-                    local pos, on = cam:WorldToViewportPoint(part.Position)
-                    if on then
-                        local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                        if d < bestDist and visible(cam, part, char) then
-                            best, bestDist = part, d
-                        end
+            if hum and hum.Health > 0 and part
+                and not (Settings.TeamCheck and p.Team ~= nil and p.Team == LocalPlayer.Team)
+                and (part.Position - myPos).Magnitude > Settings.MinDistance then
+                local pos, on = cam:WorldToViewportPoint(part.Position)
+                if on then
+                    local d = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                    if d < bestDist and visible(cam, part, char) then
+                        best, bestDist = part, d
                     end
                 end
             end
@@ -86,13 +72,8 @@ RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, fu
 
     local cam = workspace.CurrentCamera
     local target = getTarget(cam)
-    if not target then return end
-
-    local strength = Settings.Pull
-    if UIS:GetMouseDelta().Magnitude > 1 then
-        strength = strength * Settings.MovingPullMultiplier
+    if target then
+        local goal = CFrame.lookAt(cam.CFrame.Position, target.Position)
+        cam.CFrame = cam.CFrame:Lerp(goal, Settings.Smoothness)
     end
-
-    local goal = CFrame.lookAt(cam.CFrame.Position, target.Position)
-    cam.CFrame = cam.CFrame:Lerp(goal, strength)
 end)
