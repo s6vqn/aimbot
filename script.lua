@@ -5,19 +5,23 @@ local LocalPlayer = Players.LocalPlayer
 
 local Settings = {
     Enabled = false,
-    PullSpeed = 5,
-    MovingMultiplier = 0.15,
-    GlideSpeed = 6,        -- mas mababa = mas mabagal ang dulas papunta sa bagong target
+    PullSpeed = 25,
+    MovingMultiplier = 0.3,
+    GlideSpeed = 8,
     FOV = 40,
-    MinFalloff = 0.25,     -- lakas ng hila sa gilid ng FOV (0 hanggang 1)
+    MinFalloff = 0.6,
     MinDistance = 5,
     ToggleBlockDistance = 1,
     TeamCheck = true,
+    WallCheck = true,
+    IgnoreNonCollide = false, -- true = lalampasan ang parts na walang collision
+    Debug = false,            -- true = ipapakita sa F9 kung ano ang humaharang
     HeadBias = 0.6,
+    TorsoHold = 0.6,
     LimbChance = 0.20,
     RerollTime = 1.5,
     Prediction = true,
-    PredictionTime = 0.08, -- dagdag na segundo bukod sa ping
+    PredictionTime = 0.08,
     JumpPrediction = true,
 }
 
@@ -30,6 +34,19 @@ local LimbNames = {
 print("[Aimbot] Loaded. T = toggle, hold right click = aim")
 
 local aimPoint = nil
+local lastPlayer = nil
+local switching = false
+local mouseMoving = false
+local torsoUntil = 0
+local baseIgnore = {}
+local lastLog = 0
+
+local function resetAim()
+    aimPoint = nil
+    lastPlayer = nil
+    switching = false
+    torsoUntil = 0
+end
 
 local function getMyPos(cam)
     local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -40,6 +57,10 @@ local function isTeammate(p)
     return Settings.TeamCheck and p.Team ~= nil and p.Team == LocalPlayer.Team
 end
 
+local function isDead(hum)
+    return hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead
+end
+
 local function someoneTooClose()
     local myPos = getMyPos(workspace.CurrentCamera)
     for _, p in ipairs(Players:GetPlayers()) do
@@ -47,7 +68,7 @@ local function someoneTooClose()
         if p ~= LocalPlayer and char and not isTeammate(p) then
             local hum = char:FindFirstChildOfClass("Humanoid")
             local root = char:FindFirstChild("HumanoidRootPart")
-            if hum and hum.Health > 0 and root
+            if hum and not isDead(hum) and root
                 and (root.Position - myPos).Magnitude <= Settings.ToggleBlockDistance then
                 return true
             end
@@ -63,14 +84,14 @@ UIS.InputBegan:Connect(function(input)
             return
         end
         Settings.Enabled = not Settings.Enabled
-        aimPoint = nil
+        resetAim()
         print("[Aimbot] Enabled:", Settings.Enabled)
     end
 end)
 
 UIS.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
-        aimPoint = nil
+        resetAim()
     end
 end)
 
@@ -106,7 +127,17 @@ local function getLimb(char)
     return nil
 end
 
--- prediction: galaw + ping + talon (gravity kapag nasa ere)
+local function isAirborne(hum, root)
+    local s = hum:GetState()
+    if s == Enum.HumanoidStateType.Jumping or s == Enum.HumanoidStateType.Freefall then
+        return true
+    end
+    if hum.FloorMaterial == Enum.Material.Air then
+        return true
+    end
+    return math.abs(root.AssemblyLinearVelocity.Y) > 8
+end
+
 local function predicted(part, root, hum)
     if not Settings.Prediction then
         return part.Position
@@ -117,13 +148,51 @@ local function predicted(part, root, hum)
     if ok and ping then t = t + ping end
 
     local vel = root.AssemblyLinearVelocity
-    local airborne = Settings.JumpPrediction and hum.FloorMaterial == Enum.Material.Air
 
-    if airborne then
+    if Settings.JumpPrediction and isAirborne(hum, root) then
         local g = workspace.Gravity
         return part.Position + vel * t + Vector3.new(0, -0.5 * g * t * t, 0)
     end
     return part.Position + Vector3.new(vel.X, 0, vel.Z) * t
+end
+
+-- listahan ng lahat ng character na lalampasan ng wall check (ako + ibang players)
+local function buildIgnore()
+    baseIgnore = {}
+    if LocalPlayer.Character then table.insert(baseIgnore, LocalPlayer.Character) end
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LocalPlayer and pl.Character then
+            table.insert(baseIgnore, pl.Character)
+        end
+    end
+end
+
+-- wall check: totoong posisyon ng part ang sinusukat; mapa at pader lang ang humaharang
+local function visible(cam, targetPos)
+    if not Settings.WallCheck then return true end
+
+    local origin = cam.CFrame.Position
+    local ignore = table.clone(baseIgnore)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+
+    for _ = 1, 20 do
+        params.FilterDescendantsInstances = ignore
+        local hit = workspace:Raycast(origin, targetPos - origin, params)
+        if not hit then return true end
+
+        local inst = hit.Instance
+        if inst.Transparency >= 0.9 or (Settings.IgnoreNonCollide and not inst.CanCollide) then
+            table.insert(ignore, inst)
+        else
+            if Settings.Debug and tick() - lastLog > 1 then
+                lastLog = tick()
+                print("[Aimbot] Wall blocked by:", inst:GetFullName())
+            end
+            return false
+        end
+    end
+    return false
 end
 
 local function screenDist(cam, pos, center)
@@ -138,15 +207,16 @@ local function evaluate(cam, p, center, myPos, fov)
 
     local hum = char:FindFirstChildOfClass("Humanoid")
     local root = char:FindFirstChild("HumanoidRootPart")
-    if not (hum and hum.Health > 0 and root) then return nil end
+    if not (hum and root) or isDead(hum) then return nil end
     if (root.Position - myPos).Magnitude <= Settings.MinDistance then return nil end
 
     local head = char:FindFirstChild("Head")
     local torso = getTorso(char)
     local limb = getLimb(char)
 
-    local pos, d
+    local pos, d, part
     if limb then
+        part = limb
         pos = predicted(limb, root, hum)
         d = screenDist(cam, pos, center)
     else
@@ -154,66 +224,82 @@ local function evaluate(cam, p, center, myPos, fov)
         local tp = torso and predicted(torso, root, hum)
         local dh = hp and screenDist(cam, hp, center)
         local dt = tp and screenDist(cam, tp, center)
+
+        if dh and dt and mouseMoving and dt < dh * Settings.HeadBias then
+            torsoUntil = tick() + Settings.TorsoHold
+        end
+        local useTorso = tick() < torsoUntil
+
         if dh and dt then
-            if dt < dh * Settings.HeadBias then
-                pos, d = tp, dt
+            if useTorso then
+                pos, d, part = tp, dt, torso
             else
-                pos, d = hp, dh
+                pos, d, part = hp, dh, head
             end
         elseif dh then
-            pos, d = hp, dh
+            pos, d, part = hp, dh, head
         elseif dt then
-            pos, d = tp, dt
+            pos, d, part = tp, dt, torso
         end
     end
 
-    if pos and d and d < fov then
+    if pos and d and d < fov and visible(cam, part.Position) then
         return pos, d
     end
     return nil
 end
 
 local function getTarget(cam)
+    buildIgnore()
     local center = cam.ViewportSize / 2
     local myPos = getMyPos(cam)
-    local best, bestDist = nil, Settings.FOV
+    local best, bestDist, bestPlayer = nil, Settings.FOV, nil
 
     for _, p in ipairs(Players:GetPlayers()) do
         local pos, d = evaluate(cam, p, center, myPos, bestDist)
         if pos then
-            best, bestDist = pos, d
+            best, bestDist, bestPlayer = pos, d, p
         end
     end
-    return best, bestDist
+    return best, bestDist, bestPlayer
 end
 
 RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, function(dt)
     if not Settings.Enabled then return end
     if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
 
+    mouseMoving = UIS:GetMouseDelta().Magnitude > 1
+
     local cam = workspace.CurrentCamera
-    local target, dist = getTarget(cam)
+    local target, dist, targetPlayer = getTarget(cam)
     if not target then
-        aimPoint = nil
+        resetAim()
         return
     end
 
-    -- dumudulas ang aim point papunta sa target, hindi tumatalon kapag nagpalit
     if not aimPoint then
         aimPoint = target
     else
-        local glide = 1 - math.exp(-Settings.GlideSpeed * dt)
-        aimPoint = aimPoint:Lerp(target, glide)
+        if lastPlayer and targetPlayer ~= lastPlayer then
+            switching = true
+        end
+        if switching then
+            aimPoint = aimPoint:Lerp(target, 1 - math.exp(-Settings.GlideSpeed * dt))
+            if (aimPoint - target).Magnitude < 1.5 then
+                switching = false
+            end
+        else
+            aimPoint = target
+        end
     end
+    lastPlayer = targetPlayer
 
-    -- mas malapit sa crosshair = mas malakas ang hila
     local falloff = math.max(Settings.MinFalloff, 1 - (dist / Settings.FOV))
     local speed = Settings.PullSpeed * falloff
-    if UIS:GetMouseDelta().Magnitude > 1 then
+    if mouseMoving then
         speed = speed * Settings.MovingMultiplier
     end
 
     local alpha = 1 - math.exp(-speed * dt)
-    local goal = CFrame.lookAt(cam.CFrame.Position, aimPoint)
-    cam.CFrame = cam.CFrame:Lerp(goal, alpha)
+    cam.CFrame = cam.CFrame:Lerp(CFrame.lookAt(cam.CFrame.Position, aimPoint), alpha)
 end)
