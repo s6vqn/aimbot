@@ -7,9 +7,7 @@ local Settings = {
     Enabled = false,
     PullSpeed = 5,
     MovingMultiplier = 0.15,
-    GlideSpeed = 6,        -- mas mababa = mas mabagal ang dulas papunta sa bagong target
     FOV = 40,
-    MinFalloff = 0.25,     -- lakas ng hila sa gilid ng FOV (0 hanggang 1)
     MinDistance = 5,
     ToggleBlockDistance = 1,
     TeamCheck = true,
@@ -25,8 +23,6 @@ local LimbNames = {
 }
 
 print("[Aimbot] Loaded. T = toggle, hold right click = aim")
-
-local aimPoint = nil
 
 local function getMyPos(cam)
     local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -60,14 +56,7 @@ UIS.InputBegan:Connect(function(input)
             return
         end
         Settings.Enabled = not Settings.Enabled
-        aimPoint = nil
         print("[Aimbot] Enabled:", Settings.Enabled)
-    end
-end)
-
-UIS.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then
-        aimPoint = nil
     end
 end)
 
@@ -78,6 +67,7 @@ local function getTorso(char)
     end
 end
 
+-- limb roll: bawat player may sariling roll na nire-reroll kada RerollTime
 local limbRoll = {}
 
 local function getLimb(char)
@@ -127,56 +117,49 @@ local function screenDist(cam, part, center)
     return (Vector2.new(pos.X, pos.Y) - center).Magnitude
 end
 
-local function evaluate(cam, p, center, myPos, fov)
-    local char = p.Character
-    if not char or p == LocalPlayer or isTeammate(p) then return nil end
-
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not (hum and hum.Health > 0 and root) then return nil end
-    if (root.Position - myPos).Magnitude <= Settings.MinDistance then return nil end
-
-    local head = char:FindFirstChild("Head")
-    local torso = getTorso(char)
-    local limb = getLimb(char)
-
-    local part, d
-    if limb then
-        part, d = limb, screenDist(cam, limb, center)
-    else
-        local dh = head and screenDist(cam, head, center)
-        local dt = torso and screenDist(cam, torso, center)
-        if dh and dt then
-            if dt < dh * Settings.HeadBias then
-                part, d = torso, dt
-            else
-                part, d = head, dh
-            end
-        elseif dh then
-            part, d = head, dh
-        elseif dt then
-            part, d = torso, dt
-        end
-    end
-
-    if part and d and d < fov and visible(cam, part, char) then
-        return part, d
-    end
-    return nil
-end
-
 local function getTarget(cam)
     local center = cam.ViewportSize / 2
-    local myPos = getMyPos(cam)
     local best, bestDist = nil, Settings.FOV
+    local myPos = getMyPos(cam)
 
     for _, p in ipairs(Players:GetPlayers()) do
-        local part, d = evaluate(cam, p, center, myPos, bestDist)
-        if part then
-            best, bestDist = part, d
+        local char = p.Character
+        if p ~= LocalPlayer and char and not isTeammate(p) then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if hum and hum.Health > 0 and root
+                and (root.Position - myPos).Magnitude > Settings.MinDistance then
+                local head = char:FindFirstChild("Head")
+                local torso = getTorso(char)
+                local limb = getLimb(char)
+
+                local part, d
+                if limb then
+                    part, d = limb, screenDist(cam, limb, center)
+                else
+                    local dh = head and screenDist(cam, head, center)
+                    local dt = torso and screenDist(cam, torso, center)
+
+                    if dh and dt then
+                        if dt < dh * Settings.HeadBias then
+                            part, d = torso, dt
+                        else
+                            part, d = head, dh
+                        end
+                    elseif dh then
+                        part, d = head, dh
+                    elseif dt then
+                        part, d = torso, dt
+                    end
+                end
+
+                if part and d and d < bestDist and visible(cam, part, char) then
+                    best, bestDist = part, d
+                end
+            end
         end
     end
-    return best, bestDist
+    return best
 end
 
 RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, function(dt)
@@ -184,28 +167,15 @@ RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, fu
     if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
 
     local cam = workspace.CurrentCamera
-    local target, dist = getTarget(cam)
-    if not target then
-        aimPoint = nil
-        return
-    end
+    local target = getTarget(cam)
+    if not target then return end
 
-    -- dumudulas ang aim point papunta sa target, hindi tumatalon kapag nagpalit
-    if not aimPoint then
-        aimPoint = target.Position
-    else
-        local glide = 1 - math.exp(-Settings.GlideSpeed * dt)
-        aimPoint = aimPoint:Lerp(target.Position, glide)
-    end
-
-    -- mas malapit sa crosshair = mas malakas ang hila
-    local falloff = math.max(Settings.MinFalloff, 1 - (dist / Settings.FOV))
-    local speed = Settings.PullSpeed * falloff
+    local speed = Settings.PullSpeed
     if UIS:GetMouseDelta().Magnitude > 1 then
         speed = speed * Settings.MovingMultiplier
     end
 
     local alpha = 1 - math.exp(-speed * dt)
-    local goal = CFrame.lookAt(cam.CFrame.Position, aimPoint)
+    local goal = CFrame.lookAt(cam.CFrame.Position, target.Position)
     cam.CFrame = cam.CFrame:Lerp(goal, alpha)
 end)
