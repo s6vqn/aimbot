@@ -14,8 +14,8 @@ local Settings = {
     ToggleBlockDistance = 1,
     TeamCheck = true,
     WallCheck = true,
-    IgnoreNonCollide = false,
-    Debug = false,
+    IgnoreNonCollide = true,
+    Debug = true,
     HeadBias = 0.6,
     TorsoHold = 0.6,
     LimbChance = 0.20,
@@ -40,6 +40,13 @@ local mouseMoving = false
 local torsoUntil = 0
 local baseIgnore = {}
 local lastLog = 0
+
+local function log(...)
+    if Settings.Debug and tick() - lastLog > 1 then
+        lastLog = tick()
+        print("[Aimbot]", ...)
+    end
+end
 
 local function resetAim()
     aimPoint = nil
@@ -170,7 +177,8 @@ local function visible(cam, targetPos)
     if not Settings.WallCheck then return true end
 
     local origin = cam.CFrame.Position
-    local ignore = table.clone(baseIgnore)
+    local ignore = {}
+    for i, v in ipairs(baseIgnore) do ignore[i] = v end
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -183,10 +191,7 @@ local function visible(cam, targetPos)
         if inst.Transparency >= 0.9 or (Settings.IgnoreNonCollide and not inst.CanCollide) then
             table.insert(ignore, inst)
         else
-            if Settings.Debug and tick() - lastLog > 1 then
-                lastLog = tick()
-                print("[Aimbot] Wall blocked by:", inst:GetFullName())
-            end
+            log("Wall blocked by:", inst:GetFullName())
             return false
         end
     end
@@ -241,7 +246,13 @@ local function evaluate(cam, p, center, myPos, fov)
         end
     end
 
-    if pos and d and d < fov and visible(cam, part.Position) then
+    if not (pos and d and d < fov) then return nil end
+
+    -- visible kung makita ang napiling part O ang torso/head
+    local seen = visible(cam, part.Position)
+        or (head and visible(cam, head.Position))
+        or (torso and visible(cam, torso.Position))
+    if seen then
         return pos, d
     end
     return nil
@@ -271,6 +282,7 @@ RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, fu
     local cam = workspace.CurrentCamera
     local target, dist, targetPlayer = getTarget(cam)
     if not target then
+        log("no target in FOV")
         resetAim()
         return
     end
