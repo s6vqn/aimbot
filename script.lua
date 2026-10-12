@@ -13,7 +13,6 @@ local Settings = {
     MinDistance = 5,
     ToggleBlockDistance = 1,
     TeamCheck = true,
-    WallCheck = true,
     HeadBias = 0.6,
     LimbChance = 0.20,
     RerollTime = 1.5,
