@@ -8,7 +8,7 @@ local Settings = {
     PullSpeed = 5,
     MovingMultiplier = 0.15,
     GlideSpeed = 6,        -- mas mababa = mas mabagal ang dulas papunta sa bagong target
-    FOV = 50,
+    FOV = 40,
     MinFalloff = 0.25,     -- lakas ng hila sa gilid ng FOV (0 hanggang 1)
     MinDistance = 5,
     ToggleBlockDistance = 1,
