@@ -5,7 +5,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local Settings = {
     Enabled = false,
-    PullSpeed = 12,
+    PullSpeed = 8,
     MovingMultiplier = 0.3,
     GlideSpeed = 8,
     FOV = 40,
