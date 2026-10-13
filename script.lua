@@ -14,8 +14,8 @@ local Settings = {
     ToggleBlockDistance = 1,
     TeamCheck = true,
     WallCheck = true,
-    IgnoreNonCollide = false, -- true = lalampasan ang parts na walang collision
-    Debug = false,            -- true = ipapakita sa F9 kung ano ang humaharang
+    IgnoreNonCollide = false, 
+    Debug = false,            
     HeadBias = 0.6,
     TorsoHold = 0.6,
     LimbChance = 0.20,
@@ -27,8 +27,8 @@ local Settings = {
 
 local TorsoNames = {"UpperTorso", "Torso", "HumanoidRootPart"}
 local LimbNames = {
-    "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg", -- R15
-    "Left Arm", "Right Arm", "Left Leg", "Right Leg",                 -- R6
+    "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg", 
+    "Left Arm", "Right Arm", "Left Leg", "Right Leg",                 
 }
 
 print("[Aimbot] Loaded. T = toggle, hold right click = aim")
@@ -156,7 +156,7 @@ local function predicted(part, root, hum)
     return part.Position + Vector3.new(vel.X, 0, vel.Z) * t
 end
 
--- listahan ng lahat ng character na lalampasan ng wall check (ako + ibang players)
+
 local function buildIgnore()
     baseIgnore = {}
     if LocalPlayer.Character then table.insert(baseIgnore, LocalPlayer.Character) end
@@ -167,7 +167,7 @@ local function buildIgnore()
     end
 end
 
--- wall check: totoong posisyon ng part ang sinusukat; mapa at pader lang ang humaharang
+
 local function visible(cam, targetPos)
     if not Settings.WallCheck then return true end
 
