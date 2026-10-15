@@ -11,11 +11,14 @@ local Settings = {
     FOV = 40,
     MinFalloff = 0.6,
     MinDistance = 5,
+    MaxDistance = 300,        -- hindi tatargetin ang mas malayo dito (studs)
+    LockFOVMultiplier = 2.5,  -- mas malawak na FOV para sa naka-focus na player
+    SwitchMargin = 0.7,       -- mas mababa = kailangang mas malapit ang bagong player sa crosshair bago lumipat
     ToggleBlockDistance = 1,
     TeamCheck = true,
     WallCheck = true,
-    IgnoreNonCollide = false, 
-    Debug = false,            
+    IgnoreNonCollide = false,
+    Debug = false,
     HeadBias = 0.6,
     TorsoHold = 0.6,
     LimbChance = 0.20,
@@ -27,14 +30,15 @@ local Settings = {
 
 local TorsoNames = {"UpperTorso", "Torso", "HumanoidRootPart"}
 local LimbNames = {
-    "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg", 
-    "Left Arm", "Right Arm", "Left Leg", "Right Leg",                 
+    "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg",
+    "Left Arm", "Right Arm", "Left Leg", "Right Leg",
 }
 
 print("[Aimbot] Loaded. T = toggle, hold right click = aim")
 
 local aimPoint = nil
 local lastPlayer = nil
+local lockedPlayer = nil
 local switching = false
 local mouseMoving = false
 local torsoUntil = 0
@@ -44,6 +48,7 @@ local lastLog = 0
 local function resetAim()
     aimPoint = nil
     lastPlayer = nil
+    lockedPlayer = nil
     switching = false
     torsoUntil = 0
 end
@@ -93,6 +98,10 @@ UIS.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton2 then
         resetAim()
     end
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    if p == lockedPlayer then lockedPlayer = nil end
 end)
 
 local function getTorso(char)
@@ -156,7 +165,6 @@ local function predicted(part, root, hum)
     return part.Position + Vector3.new(vel.X, 0, vel.Z) * t
 end
 
-
 local function buildIgnore()
     baseIgnore = {}
     if LocalPlayer.Character then table.insert(baseIgnore, LocalPlayer.Character) end
@@ -166,7 +174,6 @@ local function buildIgnore()
         end
     end
 end
-
 
 local function visible(cam, targetPos)
     if not Settings.WallCheck then return true end
@@ -208,7 +215,9 @@ local function evaluate(cam, p, center, myPos, fov)
     local hum = char:FindFirstChildOfClass("Humanoid")
     local root = char:FindFirstChild("HumanoidRootPart")
     if not (hum and root) or isDead(hum) then return nil end
-    if (root.Position - myPos).Magnitude <= Settings.MinDistance then return nil end
+
+    local studs = (root.Position - myPos).Magnitude
+    if studs <= Settings.MinDistance or studs > Settings.MaxDistance then return nil end
 
     local head = char:FindFirstChild("Head")
     local torso = getTorso(char)
@@ -253,14 +262,29 @@ local function getTarget(cam)
     buildIgnore()
     local center = cam.ViewportSize / 2
     local myPos = getMyPos(cam)
-    local best, bestDist, bestPlayer = nil, Settings.FOV, nil
 
+    -- pinakamalapit sa crosshair (normal FOV)
+    local best, bestDist, bestPlayer = nil, Settings.FOV, nil
     for _, p in ipairs(Players:GetPlayers()) do
         local pos, d = evaluate(cam, p, center, myPos, bestDist)
         if pos then
             best, bestDist, bestPlayer = pos, d, p
         end
     end
+
+    -- manatili sa naka-focus na player hangga't hindi mo siya inilalayo
+    if lockedPlayer then
+        local lpos, ld = evaluate(cam, lockedPlayer, center, myPos, Settings.FOV * Settings.LockFOVMultiplier)
+        if lpos then
+            local dragged = mouseMoving and bestPlayer and bestPlayer ~= lockedPlayer
+                and bestDist < ld * Settings.SwitchMargin
+            if not dragged then
+                return lpos, ld, lockedPlayer
+            end
+        end
+    end
+
+    lockedPlayer = bestPlayer
     return best, bestDist, bestPlayer
 end
 
@@ -294,7 +318,7 @@ RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, fu
     end
     lastPlayer = targetPlayer
 
-    local falloff = math.max(Settings.MinFalloff, 1 - (dist / Settings.FOV))
+    local falloff = math.max(Settings.MinFalloff, 1 - (dist / (Settings.FOV * Settings.LockFOVMultiplier)))
     local speed = Settings.PullSpeed * falloff
     if mouseMoving then
         speed = speed * Settings.MovingMultiplier
