@@ -5,15 +5,15 @@ local LocalPlayer = Players.LocalPlayer
 
 local Settings = {
     Enabled = false,
-    PullSpeed = 8,
-    MovingMultiplier = 0.3,
+    PullSpeed = 4,
+    MovingMultiplier = 0.12,
     GlideSpeed = 8,
     FOV = 40,
-    MinFalloff = 0.6,
+    MinFalloff = 0.3,
     MinDistance = 5,
-    MaxDistance = 300,        -- hindi tatargetin ang mas malayo dito (studs)
-    LockFOVMultiplier = 2.5,  -- mas malawak na FOV para sa naka-focus na player
-    SwitchMargin = 0.7,       -- mas mababa = kailangang mas malapit ang bagong player sa crosshair bago lumipat
+    MaxDistance = 200,
+    LockFOVMultiplier = 2.5,
+    SwitchMargin = 0.9,       -- mas mataas = mas madaling lumipat sa ibang player
     ToggleBlockDistance = 1,
     TeamCheck = true,
     WallCheck = true,
@@ -263,7 +263,6 @@ local function getTarget(cam)
     local center = cam.ViewportSize / 2
     local myPos = getMyPos(cam)
 
-    -- pinakamalapit sa crosshair (normal FOV)
     local best, bestDist, bestPlayer = nil, Settings.FOV, nil
     for _, p in ipairs(Players:GetPlayers()) do
         local pos, d = evaluate(cam, p, center, myPos, bestDist)
@@ -272,7 +271,6 @@ local function getTarget(cam)
         end
     end
 
-    -- manatili sa naka-focus na player hangga't hindi mo siya inilalayo
     if lockedPlayer then
         local lpos, ld = evaluate(cam, lockedPlayer, center, myPos, Settings.FOV * Settings.LockFOVMultiplier)
         if lpos then
@@ -318,7 +316,8 @@ RunService:BindToRenderStep("AimbotLoop", Enum.RenderPriority.Last.Value + 1, fu
     end
     lastPlayer = targetPlayer
 
-    local falloff = math.max(Settings.MinFalloff, 1 - (dist / (Settings.FOV * Settings.LockFOVMultiplier)))
+    -- falloff batay sa normal na FOV, hindi sa lock FOV
+    local falloff = math.clamp(1 - (dist / Settings.FOV), Settings.MinFalloff, 1)
     local speed = Settings.PullSpeed * falloff
     if mouseMoving then
         speed = speed * Settings.MovingMultiplier
